@@ -23,6 +23,9 @@ and
 Streamsets data collector api - specifically https://github.com/streamsets/datacollector-api/tree/master/src/main/java/com/streamsets/pipeline/api/impl for data conversion between avro back to java types
 
 
+also see here:- https://community.mapd.com/t/apache-nifi-mapd-data-ingest-processor/1453
+
+
 
 
 
