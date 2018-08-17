@@ -75,7 +75,7 @@ public class GetMapDProcessorTest {
 		final MapDClientService service = new MapDClientService();
 		runner.addControllerService("service", service);
 
-		runner.setProperty(service, MapDClientService.MAPD_URL, "10.29.10.158");
+		runner.setProperty(service, MapDClientService.MAPD_URL, "Your Server");
 		runner.setProperty(service, MapDClientService.DB_NAME, "mapd");
 		runner.setProperty(service, MapDClientService.PORT_NUMBER, "9091");
 		runner.setProperty(service, MapDClientService.USER_NAME, "mapd");
