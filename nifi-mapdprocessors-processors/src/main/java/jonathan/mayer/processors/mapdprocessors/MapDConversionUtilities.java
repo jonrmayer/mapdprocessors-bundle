@@ -46,7 +46,12 @@ public class MapDConversionUtilities {
 
 	public MapDConversionUtilities() {
 	}
-	
+public MapDConversionUtilities(MapD.Client _mapdclient,String _mapdsession) {
+		
+		mapdclient = _mapdclient;
+		mapdsession = _mapdsession;
+		
+	}
 	public MapDConversionUtilities(MapD.Client _mapdclient,String _mapdsession, int _bufferSize) {
 		
 		mapdclient = _mapdclient;
@@ -325,11 +330,17 @@ public class MapDConversionUtilities {
 	
 	
 	
-	private void executeMapDCommand(String sql) {
-	  
+	private TQueryResult executeMapDCommand(String sql) {
+		TQueryResult sqlResult= null;
 
 	    try {
-	      TQueryResult sqlResult = mapdclient.sql_execute(mapdsession, sql + ";", true, null, -1, -1);
+	    	final MapDCommon.AvroConversionOptions options = MapDCommon.AvroConversionOptions
+					.builder().convertNames(false).useLogicalTypes(true).defaultPrecision(10)
+					.defaultScale(0).build();
+	       sqlResult = mapdclient.sql_execute(mapdsession, sql + ";", true, null, -1, -1);
+//	      MapDCommon.convertToAvroStream(sqlResult, options);
+	      
+	     
 	    } catch (TMapDException ex) {
 	    
 	      exit(1);
@@ -337,11 +348,15 @@ public class MapDConversionUtilities {
 	     
 	      exit(1);
 	    }
+		return sqlResult;
 	  }
 	
 	
 	
-	
+	public TQueryResult GetData(String sql) {
+		return executeMapDCommand(sql);
+		
+	}
 		
 
 	public AtomicLong ProcessData(String tablename,InputStream _rawIn) throws IOException, ClassNotFoundException, TMapDException, TException {
@@ -360,7 +375,7 @@ public class MapDConversionUtilities {
 			result.incrementAndGet();
 		}
 		mapdclient.load_table_binary_columnar(mapdsession, tablename, cols); // old
-		
+//		mapdclient.sql_execute(session, query, column_format, nonce, first_n, at_most_n)
 		return result;
 	}
 

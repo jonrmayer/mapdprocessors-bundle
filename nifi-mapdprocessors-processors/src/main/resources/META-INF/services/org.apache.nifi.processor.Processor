@@ -13,3 +13,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 jonathan.mayer.processors.mapdprocessors.PutMapDProcessor
+jonathan.mayer.processors.mapdprocessors.GetMapDProcessor
