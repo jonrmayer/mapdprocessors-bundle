@@ -73,7 +73,7 @@ public class PutMapDProcessorTest {
 		final MapDClientService service = new MapDClientService();
 		runner.addControllerService("service", service);
 
-		runner.setProperty(service, MapDClientService.MAPD_URL, "YOUR SERVER");
+		runner.setProperty(service, MapDClientService.MAPD_URL, "localhost");
 		runner.setProperty(service, MapDClientService.DB_NAME, "mapd");
 		runner.setProperty(service, MapDClientService.PORT_NUMBER, "9091");
 		runner.setProperty(service, MapDClientService.USER_NAME, "mapd");
@@ -84,7 +84,7 @@ public class PutMapDProcessorTest {
 
 		runner.setProperty(PutMapDProcessor.MAPD_SERVICE, "service");
 		
-		runner.setProperty(PutMapDProcessor.MAPD_TABLE, "TEST5");
+		runner.setProperty(PutMapDProcessor.MAPD_TABLE, "TEST");
 		runner.setProperty(PutMapDProcessor.BUFFER_SIZE, "100000");
 
 		long startTime = System.currentTimeMillis();

@@ -15,8 +15,12 @@ import org.apache.avro.io.DatumWriter;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Date;
 import java.util.function.Function;
+
+import org.apache.nifi.avro.AvroTypeUtil;
 import org.apache.nifi.util.StringUtils;
 
 import com.mapd.thrift.server.TDatumType;
@@ -34,42 +38,102 @@ public class MapDCommon {
 
 	public static final String MIME_TYPE_AVRO_BINARY = "application/avro-binary";
 
-	public static long convertToAvroStream(final TQueryResult rs, final OutputStream outStream,final AvroConversionOptions options) throws IOException {
+	public static long convertToAvroStream(final TQueryResult rs, final OutputStream outStream,
+			final AvroConversionOptions options) throws IOException {
 		final Schema schema = createSchema(rs, options);
 		final GenericRecord rec = new GenericData.Record(schema);
 		final DatumWriter<GenericRecord> datumWriter = new GenericDatumWriter<>(schema);
 		try (final DataFileWriter<GenericRecord> dataFileWriter = new DataFileWriter<>(datumWriter)) {
 			dataFileWriter.create(schema, outStream);
+			 long nrOfRows = 0;
 			final int numCols = rs.row_set.row_desc.size();
 			final int numRows = rs.row_set.columns.get(0).nulls.size();
 			for (int r = 0; r < numRows; r++) {
-				 for (int c = 0; c < numCols; c++) {
-					 	final int decimalPrecision;
-						final int decimalScale;
-						final Schema fieldSchema = schema.getFields().get(c).schema();
-						String fieldName = rs.row_set.row_desc.get(c).col_name;
-						String columnName = options.convertNames ? normalizeNameForAvro(fieldName) : fieldName;
-						TTypeInfo fieldtypeinfo = rs.row_set.row_desc.get(c).col_type;
-						TDatumType fieldType = fieldtypeinfo.type;
+				for (int c = 0; c < numCols; c++) {
+					final int decimalPrecision;
+					final int decimalScale;
+					final Schema fieldSchema = schema.getFields().get(c).schema();
+					String fieldName = rs.row_set.row_desc.get(c).col_name;
+					String columnName = options.convertNames ? normalizeNameForAvro(fieldName) : fieldName;
+					TTypeInfo fieldtypeinfo = rs.row_set.row_desc.get(c).col_type;
+					TDatumType fieldType = fieldtypeinfo.type;
 
-						boolean fieldIsArray = fieldtypeinfo.is_array;
-						String fieldType2 = fieldType.toString(); 
-						switch (fieldType2) {
-						case "TIME":
-		                case "TIMESTAMP":
-		                case "DATE":
-		                	
-		                	Date d =	new Date(rs.row_set.columns.get(c).data.int_col.get(r)*1000) ;
-		                
-						
+					boolean fieldIsArray = fieldtypeinfo.is_array;
+					String fieldType2 = fieldType.toString();
+					Object value;
+					switch (fieldType2) {
+					case "BOOL":
+						value = rs.row_set.columns.get(c).data.int_col.get(r);
+						 rec.put(c, (Boolean)value);
+						break;
+					case "TIME":
+					case "TIMESTAMP":
+					case "DATE":
+
+						value = new Date(rs.row_set.columns.get(c).data.int_col.get(r) * 1000);
+
+						if (options.useLogicalTypes) {
+							// Delegate mapping to AvroTypeUtil in order to utilize logical types.
+							rec.put(c, AvroTypeUtil.convertToAvroObject(value, fieldSchema));
+						} else {
+							// As string for backward compatibility.
+							rec.put(c, value.toString());
 						}
-					 
-				 }
-				
+
+						break;
+					case "SMALLINT":
+					case "INT":
+						value = rs.row_set.columns.get(c).data.int_col.get(r);
+						rec.put(c, value);
+						break;
+					case "BIGINT":
+						decimalPrecision = fieldtypeinfo.precision;
+						value = rs.row_set.columns.get(c).data.int_col.get(r);
+						
+						 if (decimalPrecision < 0 || decimalPrecision > MAX_DIGITS_IN_BIGINT) {
+                             rec.put(c, value.toString());
+                         } else {
+                             try {
+                                 rec.put(c, ((BigInteger) value).longValueExact());
+                             } catch (ArithmeticException ae) {
+                                 // Since the value won't fit in a long, convert it to a string
+                                 rec.put(c, value.toString());
+                             }
+                         }
+						
+						 break;
+					
+					case "FLOAT":
+					case "DOUBLE":
+					case "DECIMAL":
+						value = rs.row_set.columns.get(c).data.real_col.get(r);
+						if (options.useLogicalTypes) {
+							// Delegate mapping to AvroTypeUtil in order to utilize logical types.
+							rec.put(c, AvroTypeUtil.convertToAvroObject(value, fieldSchema));
+						} else {
+							// As string for backward compatibility.
+							rec.put(c, value.toString());
+						}
+
+						break;
+					case "MULTIPOLYGON":
+					case "POINT":
+					case "LINE":
+					case "STR":
+						value = rs.row_set.columns.get(c).data.str_col.get(r);
+						rec.put(c, value.toString());
+						break;
+					}
+					
+
+				}
+				 dataFileWriter.append(rec);
+	                nrOfRows += 1;
 			}
+			return nrOfRows;
 		}
+
 		
-		return 0;
 
 	}
 
@@ -104,7 +168,7 @@ public class MapDCommon {
 			case "TINYINT":
 				builder.name(columnName).type().unionOf().nullBuilder().endNull().and().intType().endUnion()
 						.noDefault();
-			
+
 				break;
 			case "INT":
 				decimalPrecision = fieldtypeinfo.precision;
@@ -116,7 +180,7 @@ public class MapDCommon {
 							.noDefault();
 				}
 				break;
-				
+
 			case "BIGINT":
 				decimalPrecision = fieldtypeinfo.precision;
 				if (decimalPrecision < 0 || decimalPrecision > MAX_DIGITS_IN_BIGINT) {
@@ -138,7 +202,7 @@ public class MapDCommon {
 			case "DECIMAL":
 				// fieldtypeinfo
 				if (options.useLogicalTypes) {
-					
+
 					if (fieldtypeinfo.precision > 0) {
 						decimalPrecision = fieldtypeinfo.precision;
 						decimalScale = fieldtypeinfo.scale;
@@ -154,6 +218,7 @@ public class MapDCommon {
 				}
 
 				break;
+			case "MULTIPOLYGON":
 			case "STR":
 				builder.name(columnName).type().unionOf().nullBuilder().endNull().and().stringType().endUnion()
 						.noDefault();
@@ -177,9 +242,9 @@ public class MapDCommon {
 								: u.stringType());
 				break;
 			default:
-				throw new IllegalArgumentException("createSchema: Unknown MapD SQL type " + fieldType2 + " / "
-						+ columnName + " (table: " + tableName + ", column: " + columnName
-						+ ") cannot be converted to Avro type");
+				throw new IllegalArgumentException(
+						"createSchema: Unknown MapD SQL type " + fieldType2 + " / " + columnName + " (table: "
+								+ tableName + ", column: " + columnName + ") cannot be converted to Avro type");
 			}
 
 		}

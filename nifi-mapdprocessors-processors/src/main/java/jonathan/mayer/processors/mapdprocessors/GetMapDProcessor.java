@@ -33,6 +33,7 @@ import org.apache.nifi.processor.ProcessSession;
 import org.apache.nifi.processor.ProcessorInitializationContext;
 import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.util.StandardValidators;
+import org.apache.nifi.util.StopWatch;
 import org.apache.thrift.TException;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.flowfile.attributes.CoreAttributes;
@@ -72,6 +73,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -126,6 +128,8 @@ public class GetMapDProcessor extends AbstractProcessor {
 
 	private static AtomicLong written;
 	private static String err;
+	public static final String RESULT_ROW_COUNT = "executesql.row.count";
+    public static final String RESULT_QUERY_DURATION = "executesql.query.duration";
 
 	@Override
 	protected void init(final ProcessorInitializationContext context) {
@@ -167,7 +171,7 @@ public class GetMapDProcessor extends AbstractProcessor {
 			fileToProcess = session.get();
 
 		}
-
+		final StopWatch stopWatch = new StopWatch(true);
 		written = new AtomicLong(0L);
 
 		final String sql_statement = context.getProperty(SQL_STATEMENT).getValue();
@@ -206,30 +210,24 @@ public class GetMapDProcessor extends AbstractProcessor {
 					}
 				}
 			});
-
-			// outgoingAvro = session.write(outgoingAvro, new StreamCallback() {
-			// @Override
-			// public void process(final InputStream rawIn, final OutputStream rawOut)
-			// throws IOException {
-			// mcu.GetData(sql_statement);
-			//
-			// }
-			//
-			// });
-			// //
-			// outgoingAvro = session.putAttribute(outgoingAvro, "mapd_records_written",
-			// String.valueOf(written.get()));
-			// session.remove(flowFile);
-			// session.transfer(outgoingAvro, REL_SUCCESS);
+			 long duration = stopWatch.getElapsed(TimeUnit.MILLISECONDS);
+			 resultSetFF = session.putAttribute(resultSetFF, RESULT_ROW_COUNT, String.valueOf(nrOfRows.get()));
+             resultSetFF = session.putAttribute(resultSetFF, RESULT_QUERY_DURATION, String.valueOf(duration));
+             resultSetFF = session.putAttribute(resultSetFF, CoreAttributes.MIME_TYPE.key(), MapDCommon.MIME_TYPE_AVRO_BINARY);
+			
+             session.getProvenanceReporter().modifyContent(resultSetFF, "Retrieved " + nrOfRows.get() + " rows", duration);
+             session.transfer(resultSetFF, REL_SUCCESS);
+             //If we had at least one result then it's OK to drop the original file, but if we had no results then
+             //  pass the original flow file down the line to trigger downstream processors
+             if(fileToProcess != null){
+            	 session.remove(fileToProcess);
+             }
 
 		} catch (final ProcessException pe) {
 
-			// outgoingAvro = session.putAttribute(flowFile, "mapd_error", err);
-			// session.remove(flowFile);
-			// session.transfer(outgoingAvro, REL_FAILURE);
+			session.transfer(fileToProcess, REL_FAILURE);
 
-			return;
-			// }
+			
 
 		}
 	}
